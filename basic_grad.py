@@ -25,8 +25,24 @@ encode, decode = network.codec.encode, network.codec.decode
 with graph.as_default():
     # _ 是data_iterator如果是dataset input的话
     inputs, input_seq_len, targets, dropout_rate, _, _ = network.create_placeholders()
-    output_seq_len, time_major_logits, time_major_softmax, logits, softmax, decoded, sparse_decoded, scale_factor, log_prob = \
-        network.create_network(inputs, input_seq_len, dropout_rate, reuse_variables=tf.AUTO_REUSE)
+    # output_seq_len, time_major_logits, time_major_softmax, logits, softmax, decoded, sparse_decoded, scale_factor, log_prob = \
+    #     network.create_network(inputs, input_seq_len, dropout_rate, reuse_variables=tf.AUTO_REUSE)
+    output_seq_len, \
+    time_major_logits, \
+    time_major_softmax, \
+    logits, \
+    softmax, \
+    sparse_decoded, \
+    decoded_tuple, \
+    other = network.create_network(
+        inputs, input_seq_len, dropout_rate, reuse_variables=tf.AUTO_REUSE
+    )
+    decoded = sparse_decoded
+
+    # 解码结果
+    # decoded_tuple 是一个三元组: (decoded_indices, decoded_values, decoded_shape)
+    decoded_inds, decoded_vals, decoded_shape = decoded_tuple
+    
     loss = tf.nn.ctc_loss(labels=targets,
                           inputs=time_major_logits,
                           sequence_length=output_seq_len,
@@ -136,7 +152,7 @@ with graph.as_default():
                 break
         record_iter[batch_size * batch_i:batch_size * (batch_i + 1)] = batch_record_iter
         record_adv_text += batch_adv_text
-    duration = time.time() - start
+    duration = timecleverhans.time() - start
 
 # save the attack result
 title = f"{font_name}-{case}-l{pert_type}-eps{eps}-ieps{eps_iter}-iter{nb_iter}"

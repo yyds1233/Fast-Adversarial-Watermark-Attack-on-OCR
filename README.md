@@ -32,6 +32,28 @@ The data include:
 - ocr_model
 
 
+## Additional utility scripts
+
+- `preprocess_png_to_pkl.py`
+  - Convert a folder of PNG images plus ground-truth and target text files into the repository pickle format.
+  - Produces `img_data/{font_name}.pkl` and `attack_pair/{font_name}-{case}.pkl`.
+  - Example:
+    ```bash
+    python preprocess_png_to_pkl.py \
+      --png_dir ./my_pngs \
+      --gt_txt ./gt.txt \
+      --target_txt ./target.txt \
+      --font_name Courier \
+      --case easy
+    ```
+
+- `export_wm_result_images.py`
+  - Extract images from `wm_result/*.pkl` files.
+  - Can export `adv_img`, `wm0_img`, and/or `rgb_img` as PNG files.
+  - Example:
+    ```bash
+    python export_wm_result_images.py --input wm_result --save_adv --save_rgb
+    ```
 
 
 ## Reference

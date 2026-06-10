@@ -1,0 +1,23 @@
+services:
+  fawa:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fawa:1.0
+    container_name: FAWA
+    # GPU 支持
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CONDA_DEFAULT_ENV=fawa
+      - PATH=/opt/conda/envs/fawa/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    volumes:
+      # 挂载项目目录（可选，用于开发）
+      - .:/app
+      # 挂载数据目录（如果需要）
+      - ./data:/app/data
+      # 挂载输出目录
+      - ./output:/app/output
+    working_dir: /app
+    stdin_open: true
+    tty: true
