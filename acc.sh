@@ -176,7 +176,7 @@ json_input="$1"
 mission_id=$(json_get "$json_input" "mission_id")
 test_model=$(json_get "$json_input" "model_name")
 model_class=$(json_get "$json_input" "model_class")
-eval_method=$(json_get "$json_input" "method")
+eval_method=$(json_get "$json_input" "eval_method")
 
 if [ -z "$mission_id" ] || [ "$mission_id" = "None" ]; then
     fail_response
