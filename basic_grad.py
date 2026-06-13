@@ -215,7 +215,7 @@ def main():
     with attack_pair_path.open("rb") as f:
         _, target_txt = pickle.load(f)
 
-    n_img = min(200, len(input_img), len(target_txt))
+    n_img = min(len(input_img), len(input_img), len(target_txt))
     input_img = input_img[:n_img]
     len_x = len_x[:n_img]
     gt_txt = gt_txt[:n_img]

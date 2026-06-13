@@ -14,9 +14,11 @@ Writes:
 from __future__ import annotations
 
 import argparse
+import json
 import pickle
 import re
 import time
+from datetime import datetime
 from pathlib import Path
 
 import cv2
@@ -62,6 +64,54 @@ def result_title(mission_id: str, font_name: str, case: str, pert_type: str,
                  eps: float, eps_iter: float, nb_iter: int, positive: bool = False) -> str:
     title = f"{mission_id}-{font_name}-{case}-l{pert_type}-eps{eps}-ieps{eps_iter}-iter{nb_iter}"
     return f"{title}-positive" if positive else title
+
+def write_wm_progress(
+    mission_id: str,
+    epoch: int,
+    total_epoch: int,
+    total_samples: int,
+    success_count: int,
+    objective_loss=None,
+    mse=None,
+    mse_plus=None,
+    status: str = "running",
+):
+    """Write watermark-attack progress to /app/adv_eval/<mission_id>.txt.
+
+    The poll script only returns epoch and objective_loss, but the file keeps
+    extra fields such as success_count/success_rate for debugging and later
+    evaluation. The file is written atomically via a temporary file.
+    """
+    adv_eval_dir = Path("/app/adv_eval")
+    adv_eval_dir.mkdir(parents=True, exist_ok=True)
+
+    progress_path = adv_eval_dir / f"{mission_id}.txt"
+    tmp_path = adv_eval_dir / f"{mission_id}.txt.tmp"
+
+    success_rate = 0.0
+    if total_samples:
+        success_rate = float(success_count) / float(total_samples)
+
+    data = {
+        "mission_id": mission_id,
+        "stage": "水印攻击",
+        "status": status,
+        "epoch": int(epoch),
+        "total_epoch": int(total_epoch),
+        "total_samples": int(total_samples),
+        "success_count": int(success_count),
+        "success_rate": success_rate,
+        "objective_loss": None if objective_loss is None else float(objective_loss),
+        "mse": None if mse is None else float(mse),
+        "mse_plus": None if mse_plus is None else float(mse_plus),
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+    with tmp_path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+    tmp_path.replace(progress_path)
+
 
 
 def invert(data):
@@ -374,15 +424,30 @@ def main():
     with graph.as_default():
         adv_img = wm_img_np.copy()
         m0 = np.zeros(input_img.shape)
-        record_iter = np.zeros(input_img.shape[0])
+        # Use -1 for "not successful yet" so samples that succeed at epoch 0
+        # are not confused with failed samples.
+        record_iter = np.full(input_img.shape[0], -1, dtype=np.int32)
         record_mse = []
         record_mse_plus = []
         record_adv_text = []
         last_iter = 0
         start = time.time()
 
+        write_wm_progress(
+            mission_id=mission_id,
+            epoch=0,
+            total_epoch=nb_iter,
+            total_samples=len(input_img),
+            success_count=0,
+            objective_loss=None,
+            mse=None,
+            mse_plus=None,
+            status="running",
+        )
+
         for i in tqdm(range(nb_iter)):
             last_iter = i
+            iter_loss_values = []
             batch_iter = len(input_img) // batch_size
             batch_iter = batch_iter if len(input_img) % batch_size == 0 else batch_iter + 1
 
@@ -400,8 +465,8 @@ def main():
                 batch_y = sparse_tuple_from(batch_tmp_y)
                 scaled_perturbation = scaled_perturbation_2 if pert_type == "2" else scaled_perturbation_inf
 
-                batch_pert = sess.run(
-                    scaled_perturbation,
+                batch_pert, batch_loss = sess.run(
+                    [scaled_perturbation, loss],
                     feed_dict={
                         inputs: batch_adv_img,
                         input_seq_len: batch_len_x,
@@ -412,7 +477,10 @@ def main():
                     },
                 )
 
-                batch_pert[batch_record_iter != 0] = 0
+                iter_loss_values.append(float(batch_loss))
+
+                # Samples that have already reached the target text are frozen.
+                batch_pert[batch_record_iter >= 0] = 0
                 batch_adv_img = batch_adv_img + eps_iter * batch_pert * (batch_pert > 0)
                 batch_adv_img = batch_input_img + np.clip(batch_adv_img - batch_input_img, -eps, eps)
                 batch_adv_img = np.clip(batch_adv_img, clip_min, clip_max)
@@ -440,14 +508,44 @@ def main():
                 for j in range(len(batch_target_index)):
                     adv_index, target_index = batch_adv_index[j], batch_target_index[j]
                     idx_j = start_idx + j
-                    if np.array_equal(adv_index, target_index) and record_iter[idx_j] == 0:
+                    if np.array_equal(adv_index, target_index) and record_iter[idx_j] < 0:
                         record_iter[idx_j] = i
 
-            if np.sum(record_iter == 0) == 0:
+            success_count = int(np.sum(record_iter >= 0))
+            cur_mse = record_mse[-1] if record_mse else None
+            cur_mse_plus = record_mse_plus[-1] if record_mse_plus else None
+            cur_loss = float(np.mean(iter_loss_values)) if iter_loss_values else None
+
+            write_wm_progress(
+                mission_id=mission_id,
+                epoch=i + 1,
+                total_epoch=nb_iter,
+                total_samples=len(input_img),
+                success_count=success_count,
+                objective_loss=cur_loss,
+                mse=cur_mse,
+                mse_plus=cur_mse_plus,
+                status="running",
+            )
+
+            if np.sum(record_iter < 0) == 0:
                 break
 
         duration = time.time() - start
         print(f"{last_iter} break. Time cost {duration:.4f} s")
+
+        final_success_count = int(np.sum(record_iter >= 0))
+        write_wm_progress(
+            mission_id=mission_id,
+            epoch=last_iter + 1,
+            total_epoch=nb_iter,
+            total_samples=len(input_img),
+            success_count=final_success_count,
+            objective_loss=None,
+            mse=record_mse[-1] if record_mse else None,
+            mse_plus=record_mse_plus[-1] if record_mse_plus else None,
+            status="finished",
+        )
 
     rgb_img = cvt2rgb(adv_img, text_mask)
 

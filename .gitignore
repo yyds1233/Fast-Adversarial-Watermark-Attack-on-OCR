@@ -9,3 +9,10 @@ raw_input/
 wm_result/
 weight/
 Arial.pkl
+run_logs/
+seed/
+shell/
+adv_eval/
+ACC_result/
+adv_sample/
+
