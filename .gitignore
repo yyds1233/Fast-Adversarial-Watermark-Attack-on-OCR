@@ -7,5 +7,6 @@ attack_result/
 img_data/
 raw_input/
 wm_result/
-
+seed/
+weight/
 Arial.pkl

@@ -28,7 +28,7 @@ from tqdm import tqdm
 from trdg.generators import GeneratorFromStrings
 
 from cleverhans import utils_tf
-from util import cvt2Image, sparse_tuple_from, resolve_mission_checkpoint
+from util import cvt2Image, sparse_tuple_from
 from calamari_ocr.ocr.backends.tensorflow_backend.tensorflow_model import TensorflowModel
 from calamari_ocr.ocr import Predictor
 
