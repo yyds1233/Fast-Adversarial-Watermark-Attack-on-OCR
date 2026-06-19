@@ -4,7 +4,7 @@
 # CalamariOCR ACC 启动脚本
 #
 # 启动方式:
-#   ./acc.sh '{"mission_id":"2052665137923358720","model_name":"CalamariOCR","model_class":"text","method":"ACC"}'
+#   ./acc.sh '{"mission_id":"2052665137923358720","model_name":"CalamariOCR","model_class":"text","eval_method":"ACC"}'
 #
 # 输入数据:
 #   /app/seed/<mission_id>.zip
@@ -32,15 +32,19 @@
 #
 # 输出:
 #   /app/adv_eval/acc_<mission_id>.txt
-#       只写 ACC 数值
+#       只写 ACC 数值，例如 98.50
 #
 #   /app/ACC_result/ACC_<mission_id>.txt
 #       写逐样本结果:
 #       img_0000.png toy foy
 #
-#   /app/adv_sample/<mission_id>.zip
+#   /app/ACC_result/<mission_id>.zip
 #       zip 内只包含:
 #       ACC_<mission_id>.txt
+#
+# 注意:
+#   本脚本不会写 /app/adv_sample/<mission_id>.zip，
+#   避免覆盖对抗攻击结果 zip。
 #
 # PID:
 #   /tmp/eval_acc_task_<mission_id>.pid
@@ -57,7 +61,6 @@ SEED_ROOT="${APP_ROOT}/seed"
 WEIGHT_ROOT="${APP_ROOT}/weight"
 ADV_EVAL_ROOT="${APP_ROOT}/adv_eval"
 ACC_RESULT_ROOT="${APP_ROOT}/ACC_result"
-ADV_SAMPLE_ROOT="${APP_ROOT}/adv_sample"
 LOG_DIR="${APP_ROOT}/run_logs"
 
 VALID_MODEL_NAME="CalamariOCR"
@@ -155,7 +158,7 @@ init_log() {
         echo "mission_id: ${mission_id}"
         echo "model_name: ${test_model}"
         echo "model_class: ${model_class}"
-        echo "method: ${eval_method}"
+        echo "eval_method: ${eval_method}"
         echo "timestamp: ${RUN_TS}"
         echo "log_file: ${LOG_FILE}"
         echo "latest_log_file: ${LATEST_LOG_FILE}"
@@ -219,13 +222,13 @@ if [ "$model_class" != "text" ]; then
 fi
 
 if [ -z "$eval_method" ] || [ "$eval_method" = "None" ]; then
-    echo "参数检查失败: method 为空" >> "$LOG_FILE"
+    echo "参数检查失败: eval_method 为空" >> "$LOG_FILE"
     fail_response
 fi
 
 if [ "$eval_method" != "ACC" ]; then
-    echo "参数检查失败: method=${eval_method}, 当前只支持 ACC" >> "$LOG_FILE"
-    json_file_error "method 无效"
+    echo "参数检查失败: eval_method=${eval_method}, 当前只支持 ACC" >> "$LOG_FILE"
+    json_file_error "eval_method 无效"
     exit 1
 fi
 
@@ -263,7 +266,7 @@ if [ ! -f "$weight_zip" ] && [ ! -d "$weight_dir" ] && [ ! -f "$default_weight_j
     exit 1
 fi
 
-mkdir -p "$ADV_EVAL_ROOT" "$ACC_RESULT_ROOT" "$ADV_SAMPLE_ROOT"
+mkdir -p "$ADV_EVAL_ROOT" "$ACC_RESULT_ROOT"
 
 # =========================================
 # 3. 生成后台 runner
@@ -283,7 +286,6 @@ SEED_ROOT="${SEED_ROOT}"
 WEIGHT_ROOT="${WEIGHT_ROOT}"
 ADV_EVAL_ROOT="${ADV_EVAL_ROOT}"
 ACC_RESULT_ROOT="${ACC_RESULT_ROOT}"
-ADV_SAMPLE_ROOT="${ADV_SAMPLE_ROOT}"
 
 mission_id="${mission_id}"
 test_model="${test_model}"
@@ -325,7 +327,7 @@ WEIGHT_DIR="${WEIGHT_ROOT}/${mission_id}"
 
 ACC_VALUE_FILE="${ADV_EVAL_ROOT}/acc_${mission_id}.txt"
 ACC_RESULT_FILE="${ACC_RESULT_ROOT}/ACC_${mission_id}.txt"
-FINAL_ZIP="${ADV_SAMPLE_ROOT}/${mission_id}.zip"
+FINAL_ZIP="${ACC_RESULT_ROOT}/${mission_id}.zip"
 
 write_status() {
     local stage="$1"
@@ -356,7 +358,6 @@ cleanup_old_outputs() {
 
     mkdir -p "$ADV_EVAL_ROOT"
     mkdir -p "$ACC_RESULT_ROOT"
-    mkdir -p "$ADV_SAMPLE_ROOT"
 
     rm -f "$ACC_VALUE_FILE"
     rm -f "${ADV_EVAL_ROOT}/acc_${mission_id}_detail.json"
@@ -644,7 +645,6 @@ package_acc_result() {
     write_status "package" "running"
 
     mkdir -p "$ACC_RESULT_ROOT"
-    mkdir -p "$ADV_SAMPLE_ROOT"
 
     if [ ! -f "$ACC_RESULT_FILE" ]; then
         bg_fail "ACC 结果文件不存在: ${ACC_RESULT_FILE}"
@@ -681,7 +681,7 @@ run_pipeline() {
     log_msg "mission_id: ${mission_id}"
     log_msg "model_name: ${test_model}"
     log_msg "model_class: ${model_class}"
-    log_msg "method: ${eval_method}"
+    log_msg "eval_method: ${eval_method}"
     log_msg "log_file: ${LOG_FILE}"
     log_msg "latest_log_file: ${LATEST_LOG_FILE}"
     log_msg "============================================================"
@@ -733,6 +733,9 @@ echo "$task_pid" > "$task_pid_file"
     echo "status_file: /tmp/eval_acc_status_${mission_id}"
     echo "model_dir_file: /tmp/eval_acc_model_dir_${mission_id}"
     echo "model_json_file: /tmp/eval_acc_model_json_${mission_id}"
+    echo "acc_value_file: /app/adv_eval/acc_${mission_id}.txt"
+    echo "acc_result_file: /app/ACC_result/ACC_${mission_id}.txt"
+    echo "acc_zip_file: /app/ACC_result/${mission_id}.zip"
 } >> "$LOG_FILE"
 
 disown "$task_pid" 2>/dev/null || true

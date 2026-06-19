@@ -100,6 +100,7 @@ if progress_file.exists():
         objective_loss = data.get("objective_loss", None)
         if objective_loss is not None:
             CTC_loss = -float(objective_loss)
+            CTC_loss = round(CTC_loss, 2)
     except Exception:
         epoch = 0
         CTC_loss = None
@@ -112,7 +113,7 @@ resp = {
         "stage": "水印攻击",
         "progress": {
             "epoch": epoch,
-            "objective_loss": objective_loss
+            "CTC_loss": CTC_loss
         }
     }
 }
